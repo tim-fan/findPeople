@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+    {% csrf_token %}
   <head>
     <style type="text/css">
       html, body { height: 100%; margin: 0; padding: 0; }
@@ -9,49 +10,113 @@
   <body>
     <div id="map"></div>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.2/jquery.min.js"></script>
+    <script async defer
+      src="https://maps.googleapis.com/maps/api/js?callback=initMap">
+    </script>
     <script type="text/javascript">
 
 var map;
 var marker;
 var lat;
 var lon;
-var userLocations;
+var userLocations = [];
 var currentLocation;
 var markers = [];
-$.getJSON("/findPeople/userLocations/", function(result){
-    lat = result.locations[0].lat;
-    lon = result.locations[0].lon;
-    userLocations = result.locations;
-});
+
 function saveCurrentPosition(position){
   currentLocation = {lat:position.coords.latitude, lon:position.coords.longitude}
   console.log('Saving current position. Initial num markers: ' + markers.length);
   markers.push(newMarker(currentLocation));
   console.log('Saved current position. Final num markers: ' + markers.length);
   updateMapBounds();
+  console.log('Saving current position to DB')
+  currentLocation = {lat:position.coords.latitude, lon:position.coords.longitude}
+  var csrftoken = getCookie('csrftoken');
+  console.log(csrftoken)
+  $.ajax(   {
+                url : '/findPeople/locations/',
+                type : "POST", // http method
+                data : {csrfmiddlewaretoken : csrftoken, 
+                        lat : currentLocation.lat,
+                        lon : currentLocation.lon
+                }, // data sent with the post request
+                // handle a successful response
+                success : function(json) {
+                    console.log('success');
+                    console.log(json); // another sanity check
+                    //On success show the data posted to server as a message
+                    //alert('Hi   '+json['email'] +'!.' + '  You have entered password:'+ json['password']);
+                },
+
+                // handle a non-successful response
+                error : function(xhr,errmsg,err) {
+                    console.log('error');
+                    console.log(xhr.status + ": " + xhr.responseText); // provide a bit more info about the error to the console
+                }
+            });
+}
+function handleGetPositionErr(err){
+    console.warn('ERROR(' + err.code + '): ' + err.message);
+}
+
+function newMarker(position) {
+  latlon = new google.maps.LatLng(position.lat, position.lon);
+  return new google.maps.Marker({position:latlon,map:map,title:"You are not here!"})
+}; 
+var geoPositionOptions = {
+  enableHighAccuracy: true,
+  timeout: 5000,
+  maximumAge: 0
+};
+
+//For getting CSRF token
+function getCookie(name) {
+          var cookieValue = null;
+          if (document.cookie && document.cookie != '') {
+                var cookies = document.cookie.split(';');
+          for (var i = 0; i < cookies.length; i++) {
+               var cookie = jQuery.trim(cookies[i]);
+          // Does this cookie string begin with the name we want?
+          if (cookie.substring(0, name.length + 1) == (name + '=')) {
+            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+              break;
+             }
+          }
+      }
+ return cookieValue;
 }
 
 function initMap() {
-  //lat = {{lat}}
-  //lon = {{lon}}
-  
+  lat = 0; 
+  lon = 0; 
   map = new google.maps.Map(document.getElementById('map'), {
     center: {lat: lat, lng: lon},
     zoom: 8
-  });
-  newMarker = function(position) {
-    latlon = new google.maps.LatLng(position.lat, position.lon);
-    return new google.maps.Marker({position:latlon,map:map,title:"You are not here!"})
-  }; 
-  //latlon = new google.maps.LatLng(lat, lon)
-  //marker = new google.maps.Marker({position:latlon,map:map,title:"You are here!"});
-  markers = markers.concat(userLocations.map(newMarker));
-  navigator.geolocation.getCurrentPosition(saveCurrentPosition)
+  })
+  
+    $.getJSON("/findPeople/locations/", function(result){
+        //todo: check null results
+        lat = result.locations[0].lat;
+        lon = result.locations[0].lon;
+        userLocations = result.locations;
+        console.log(userLocations);
+        markers = markers.concat($.map(userLocations, newMarker));
+        console.log('Saved user positions. Final num markers: ' + markers.length);
+        updateMapBounds();
+    });  
+    
+  ;
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(saveCurrentPosition, handleGetPositionErr, geoPositionOptions);
+        
+    } else {
+        console.log("Geolocation is not supported by this browser.");
+    }
+  
   //while (currentLocation == null) {}
   console.log(markers.length);
   console.log('test');
   console.log(2);
-  updateMapBounds();
 }
 function updateMapBounds() {
   var bounds = new google.maps.LatLngBounds();
@@ -64,9 +129,6 @@ function updateMapBounds() {
   console.log('updated map bounds with ' + numMarkers.toString() + ' markers')
 }
 
-    </script>
-    <script async defer
-      src="https://maps.googleapis.com/maps/api/js?callback=initMap">
     </script>
   </body>
 </html>
