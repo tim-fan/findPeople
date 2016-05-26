@@ -14,6 +14,8 @@ def viewLocations(request):
     #return render(request, 'findPeople/locationPage.html', {'lat':location.lat, 'lon':location.lon})
 
 def locations(request):
+    print(type(request.session._get_or_create_session_key()))
+    print(request.session._get_or_create_session_key()) #todo: better to call private method, or create my own session ID?
     if request.method == 'POST':
         #POST goes here . is_ajax is must to capture ajax requests. Beginner's pit.
         if request.is_ajax():
