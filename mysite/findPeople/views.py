@@ -3,6 +3,7 @@ from django.shortcuts import render_to_response
 from django.http import HttpResponse
 from django.http import HttpResponseRedirect
 from django.http import JsonResponse
+from django.views.decorators.csrf import ensure_csrf_cookie
 
 from .forms import GeoLocationForm
 from .models import GeoLocation
@@ -13,6 +14,7 @@ def viewLocations(request):
     return render_to_response('findPeople/locationPage.html')
     #return render(request, 'findPeople/locationPage.html', {'lat':location.lat, 'lon':location.lon})
 
+@ensure_csrf_cookie
 def locations(request):
     print(type(request.session._get_or_create_session_key()))
     print(request.session._get_or_create_session_key()) #todo: better to call private method, or create my own session ID?
