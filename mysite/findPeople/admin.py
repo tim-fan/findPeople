@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import GeoLocation
+from .models import LocationObservation, User 
 
 # Register your models here.
-admin.site.register(GeoLocation)
+admin.site.register(LocationObservation)
+admin.site.register(User)

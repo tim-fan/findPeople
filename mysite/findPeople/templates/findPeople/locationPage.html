@@ -26,11 +26,6 @@ var markers = [];
 function saveCurrentPosition(position){
   currentLocation = {lat:position.coords.latitude, lon:position.coords.longitude}
   console.log('Saving current position. Initial num markers: ' + markers.length);
-  markers.push(newMarker(currentLocation));
-  console.log('Saved current position. Final num markers: ' + markers.length);
-  updateMapBounds();
-  console.log('Saving current position to DB')
-  currentLocation = {lat:position.coords.latitude, lon:position.coords.longitude}
   var csrftoken = getCookie('csrftoken');
   console.log(csrftoken)
   $.ajax(   {
@@ -42,10 +37,9 @@ function saveCurrentPosition(position){
                 }, // data sent with the post request
                 // handle a successful response
                 success : function(json) {
-                    console.log('success');
+                    console.log('success. updating map bounds');
                     console.log(json); // another sanity check
-                    //On success show the data posted to server as a message
-                    //alert('Hi   '+json['email'] +'!.' + '  You have entered password:'+ json['password']);
+                    updateLocations()
                 },
 
                 // handle a non-successful response
@@ -86,26 +80,33 @@ function getCookie(name) {
  return cookieValue;
 }
 
+function updateLocations(){
+    console.log('Deleting current positions. Initial num markers: ' + markers.length);
+
+    for (var i = 0; i < markers.length; i++) {
+      markers[i].setMap(null);
+    }
+
+    console.log('Deleted current position. Num markers: ' + markers.length);
+
+    $.getJSON("/findPeople/locations/", function(result){
+        //todo: check null results
+        userLocations = result.locations;
+        console.log(userLocations);
+        markers = $.map(userLocations, newMarker);
+        redrawLocationMarkers();
+    });  
+}
+
 function initMap() {
   lat = 0; 
   lon = 0; 
   map = new google.maps.Map(document.getElementById('map'), {
     center: {lat: lat, lng: lon},
     zoom: 8
-  })
-  
-    $.getJSON("/findPeople/locations/", function(result){
-        //todo: check null results
-        lat = result.locations[0].lat;
-        lon = result.locations[0].lon;
-        userLocations = result.locations;
-        console.log(userLocations);
-        markers = markers.concat($.map(userLocations, newMarker));
-        console.log('Saved user positions. Final num markers: ' + markers.length);
-        updateMapBounds();
-    });  
-    
-  ;
+  });
+  updateLocations()
+
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(saveCurrentPosition, handleGetPositionErr, geoPositionOptions);
         
@@ -113,12 +114,9 @@ function initMap() {
         console.log("Geolocation is not supported by this browser.");
     }
   
-  //while (currentLocation == null) {}
   console.log(markers.length);
-  console.log('test');
-  console.log(2);
 }
-function updateMapBounds() {
+function redrawLocationMarkers() {
   var bounds = new google.maps.LatLngBounds();
   for (var i = 0; i < markers.length; i++) {
     bounds.extend(markers[i].getPosition());
