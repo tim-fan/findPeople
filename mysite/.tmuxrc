@@ -1,0 +1,10 @@
+rename-session findPeople
+
+split-window -v
+resize-pane -D 10
+split-window -h -t 1
+send -t 1 "source ../../bin/activate" C-m
+send -t 1 "python manage.py runserver" C-m
+send -t 2 "source ../../bin/activate" C-m
+send -t 2 "python manage.py shell" C-m
+select-pane -t 0
