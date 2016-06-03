@@ -10,61 +10,17 @@
   <body>
     <div id="map"></div>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.2/jquery.min.js"></script>
+    <!--      src="https://maps.googleapis.com/maps/api/js?callback=googleMap.initialise" -->
     <script async defer
-      src="https://maps.googleapis.com/maps/api/js?callback=initMap">
+        src="https://maps.googleapis.com/maps/api/js">
     </script>
+    <script src="https://gist.jsbin.com/GFoley83/5953448"></script>
     <script type="text/javascript">
+        
+loadGoogleMaps()
 
-var map;
-var marker;
-var lat;
-var lon;
-var userLocations = [];
-var currentLocation;
-var markers = [];
-
-function saveCurrentPosition(position){
-  currentLocation = {lat:position.coords.latitude, lon:position.coords.longitude}
-  console.log('Saving current position. Initial num markers: ' + markers.length);
-  var csrftoken = getCookie('csrftoken');
-  console.log(csrftoken)
-  $.ajax(   {
-                url : '/findPeople/locations/',
-                type : "POST", // http method
-                data : {csrfmiddlewaretoken : csrftoken, 
-                        lat : currentLocation.lat,
-                        lon : currentLocation.lon
-                }, // data sent with the post request
-                // handle a successful response
-                success : function(json) {
-                    console.log('success. updating map bounds');
-                    console.log(json); // another sanity check
-                    updateLocations()
-                },
-
-                // handle a non-successful response
-                error : function(xhr,errmsg,err) {
-                    console.log('error');
-                    console.log(xhr.status + ": " + xhr.responseText); // provide a bit more info about the error to the console
-                }
-            });
-}
-function handleGetPositionErr(err){
-    console.warn('ERROR(' + err.code + '): ' + err.message);
-}
-
-function newMarker(position) {
-  latlon = new google.maps.LatLng(position.lat, position.lon);
-  return new google.maps.Marker({position:latlon,map:map,title:"You are not here!"})
-}; 
-var geoPositionOptions = {
-  enableHighAccuracy: true,
-  timeout: 5000,
-  maximumAge: 0
-};
-
+getCookie = function(name) {
 //For getting CSRF token
-function getCookie(name) {
           var cookieValue = null;
           if (document.cookie && document.cookie != '') {
                 var cookies = document.cookie.split(';');
@@ -80,52 +36,257 @@ function getCookie(name) {
  return cookieValue;
 }
 
-function updateLocations(){
-    console.log('Deleting current positions. Initial num markers: ' + markers.length);
+var map
 
-    for (var i = 0; i < markers.length; i++) {
-      markers[i].setMap(null);
+//function initMap() {
+
+  //map = new google.maps.Map(document.getElementById('map'), {
+    //center: {lat: 0, lng: 0},
+    //zoom: 8
+  //});
+
+//}
+
+
+var geoLocation = {
+    //get geo location promise (from http://stackoverflow.com/questions/25964700/how-can-i-use-a-deferred-object-to-retrieve-a-longitude-and-latitude-with-the-ht)
+    
+    getLocation: function() {
+        var deferred = $.Deferred();
+        if(navigator.geolocation) {
+            // geo location is supported. Call navigator.geolocation.getCurrentPosition and :
+            // - resolve the promise with the returned Position object, or
+            // - reject the promise with the returned PositionError object, or
+            // - time out after 5 seconds
+            navigator.geolocation.getCurrentPosition(deferred.resolve, deferred.reject, { timeout: 5000 });
+        } else {
+            //geo location isn't supported
+            //Reject the promise with a suitable error message
+            deferred.reject(new Error('Your browser does not support Geo Location.'));
+        }
+        return deferred.promise();
     }
+};
 
-    console.log('Deleted current position. Num markers: ' + markers.length);
+var sendLocationToServer = function(location){
+  //send user location to server, returning a promise
+  console.log('Sending user location to server.');
+  console.log(location);
+  var csrftoken = getCookie('csrftoken');
+  console.log(csrftoken)
+  return $.ajax(   {
+                url : '/findPeople/locations/',
+                type : "POST", // http method
+                data : {csrfmiddlewaretoken : csrftoken, 
+                        lat : location.coords.latitude,
+                        lon : location.coords.longitude
+                } // data sent with the post request
+            });
+};
 
-    $.getJSON("/findPeople/locations/", function(result){
-        //todo: check null results
-        userLocations = result.locations;
-        console.log(userLocations);
-        markers = $.map(userLocations, newMarker);
-        redrawLocationMarkers();
-    });  
+var getLocationsFromServer = function(){
+    //get locations from server (return promise)
+    return $.getJSON("/findPeople/locations/");
 }
 
-function initMap() {
-  lat = 0; 
-  lon = 0; 
-  map = new google.maps.Map(document.getElementById('map'), {
-    center: {lat: lat, lng: lon},
-    zoom: 8
-  });
-  updateLocations()
+var locationsUpdated = geoLocation.getLocation()
+.then(sendLocationToServer)
+.then(getLocationsFromServer)
+.then(function(locations){console.log(locations)})
 
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(saveCurrentPosition, handleGetPositionErr, geoPositionOptions);
+
+$.when(locationsUpdated, loadGoogleMaps()).done(function(){console.log('map and locations are ready')})
+
+//var locationSyncManager = {
+    ////handles sending/receiving of locations to/from server
+    ////methods intended to be private are prefixed by '_' (I don't know how to javascript)
+    
+    ////todo: better method naming than 'oneWay' and 'twoWay' sync (something more like, push/pull)
+    
+    //this.configureLocationSync = function() {
+        ////determines whether subsequent sync calls will try to send user
+        ////location back to server
+        //if (navigator.geolocation) {
+            //navigator.geolocation.getCurrentPosition(
+                //function(position) { //on success
+                    //console.log('Successfully received user position. Enabling two-way sync to server');
+                    //this._enableTwoWaySync()
+                //},
+                //function(err) {      //on failure
+                    //console.warn('ERROR(' + err.code + '): ' + err.message);
+                    //console.log('Failed to received user position. Disabling two-way sync to server');
+                    //this._enableOneWaySync();
+                //}, 
+                //this._geoPositionOptions
+            //);            
+        //} else {
+            //console.log("Geolocation is not supported by this browser.");
+            //this._enableOneWaySync();
+        //}  
+    //}
+    
+    //this.locationSync = this._oneWayLocationSync; //default to one-way sync
+    //this.setSyncCompletionCallback = function(callback) {
+        ////set the function to run after location sync is complete
+        //this._syncCompletionCallback = callback;
+    //};
+    
+    //this._syncCompletionCallback = function(){};
+    
+    //this._geoPositionOptions = {
+      //enableHighAccuracy: true,
+      //timeout: 5000,
+      //maximumAge: 0 //TODO: can I add age to lastSeenTime?
+    //};    
+    
+    //this._enableTwoWaySync = function() {
+        ////switch on two-way sync
+        //console.log('Enabling push of user location to server')
+        //this.locationSync = _twoWayLocationSync;
+    //}
+    
+    //this._enableOneWaySync = function() {
+        ////switch on one-way sync
+        //console.log('Disabling push of user location to server')
+        //this.locationSync = _oneWayLocationSync;
+    //}
         
-    } else {
-        console.log("Geolocation is not supported by this browser.");
-    }
-  
-  console.log(markers.length);
-}
-function redrawLocationMarkers() {
-  var bounds = new google.maps.LatLngBounds();
-  for (var i = 0; i < markers.length; i++) {
-    bounds.extend(markers[i].getPosition());
-  }
+    //this._getCookie = function(name) {
+    ////For getting CSRF token
+              //var cookieValue = null;
+              //if (document.cookie && document.cookie != '') {
+                    //var cookies = document.cookie.split(';');
+              //for (var i = 0; i < cookies.length; i++) {
+                   //var cookie = jQuery.trim(cookies[i]);
+              //// Does this cookie string begin with the name we want?
+              //if (cookie.substring(0, name.length + 1) == (name + '=')) {
+                //cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                  //break;
+                 //}
+              //}
+          //}
+     //return cookieValue;
+    //}
+    
+    //this._sendLocationToServer = function(location, completionCallback){
+      ////send user location to server, on completion run given callback
+      //console.log('Sending user location to server.');
+      //var csrftoken = this._getCookie('csrftoken');
+      //console.log(csrftoken)
+      //$.ajax(   {
+                    //url : '/findPeople/locations/',
+                    //type : "POST", // http method
+                    //data : {csrfmiddlewaretoken : csrftoken, 
+                            //lat : location.coords.latitude,
+                            //lon : location.coords.longitude
+                    //}, // data sent with the post request
+                    //// handle a successful response
+                    //success : function(json) {
+                        //console.log('location sent to server with success');
+                        //console.log(json); // another sanity check
+                    //},
 
-  map.fitBounds(bounds);
-  numMarkers = markers.length;
-  console.log('updated map bounds with ' + numMarkers.toString() + ' markers')
-}
+                    //// handle a non-successful response
+                    //error : function(xhr,errmsg,err) {
+                        //console.log('location sent to server with error:');
+                        //console.log(xhr.status + ": " + xhr.responseText); // provide a bit more info about the error to the console
+                    //},                    
+                    
+                    //complete: function(jqXHR, textStatus) {
+                        //completionCallback()
+                    //}
+                //});
+    //}
+    
+    //this._twoWayLocationSync = function(){
+        //this._sendLocationToServer(location,
+            //this._getLocationsFromServer(this._syncCompletionCallback)
+    //}
+    
+    //this._oneWayLocationSync = function(){
+        ////get locations from server. Do not send user location to server
+        
+    //}
+//};
+
+
+//var map;
+//var marker;
+//var lat;
+//var lon;
+//var userLocations = [];
+//var currentLocation;
+//var markers = [];
+
+//function saveCurrentPosition(position){
+  //currentLocation = {lat:position.coords.latitude, lon:position.coords.longitude}
+  //console.log('Saving current position. Initial num markers: ' + markers.length);
+  //var csrftoken = getCookie('csrftoken');
+  //console.log(csrftoken)
+  //$.ajax(   {
+                //url : '/findPeople/locations/',
+                //type : "POST", // http method
+                //data : {csrfmiddlewaretoken : csrftoken, 
+                        //lat : currentLocation.lat,
+                        //lon : currentLocation.lon
+                //}, // data sent with the post request
+                //// handle a successful response
+                //success : function(json) {
+                    //console.log('success. updating map bounds');
+                    //console.log(json); // another sanity check
+                    //updateLocations()
+                //},
+
+                //// handle a non-successful response
+                //error : function(xhr,errmsg,err) {
+                    //console.log('error');
+                    //console.log(xhr.status + ": " + xhr.responseText); // provide a bit more info about the error to the console
+                //}
+            //});
+//}
+//function handleGetPositionErr(err){
+    //console.warn('ERROR(' + err.code + '): ' + err.message);
+//}
+
+//function newMarker(position) {
+  //latlon = new google.maps.LatLng(position.lat, position.lon);
+  //return new google.maps.Marker({position:latlon,map:map,title:"You are not here!"})
+//}; 
+//var geoPositionOptions = {
+  //enableHighAccuracy: true,
+  //timeout: 5000,
+  //maximumAge: 0 //TODO: can I add age to lastSeenTime?
+//};
+
+
+
+//function updateLocations(){
+    //console.log('Deleting current positions. Initial num markers: ' + markers.length);
+
+    //for (var i = 0; i < markers.length; i++) {
+      //markers[i].setMap(null);
+    //}
+
+    //console.log('Deleted current position. Num markers: ' + markers.length);
+
+    //$.getJSON("/findPeople/locations/", function(result){
+        ////todo: check null results
+        //userLocations = result.locations;
+        //console.log(userLocations);
+        //markers = $.map(userLocations, newMarker);
+        //redrawLocationMarkers();
+    //});  
+//}
+//function redrawLocationMarkers() {
+  //var bounds = new google.maps.LatLngBounds();
+  //for (var i = 0; i < markers.length; i++) {
+    //bounds.extend(markers[i].getPosition());
+  //}
+
+  //map.fitBounds(bounds);
+  //numMarkers = markers.length;
+  //console.log('updated map bounds with ' + numMarkers.toString() + ' markers')
+//}
 
     </script>
   </body>
