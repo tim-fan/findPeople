@@ -211,7 +211,10 @@ var initialiseMap = function(){
   });
 };
 
-var LocationDrawer = function(){
+var LocationDrawer = function(map, gmapsApi){
+    this.map = map
+    this.gmapsApi = gmapsApi
+
 	//object for fetching and rendering user locations on a map
 	this.setDrawingFunction = function(newDrawingFn){
 		this.drawLocations = newDrawingFn;
@@ -222,12 +225,55 @@ var LocationDrawer = function(){
 	this.getLocationsFromServer = function(){
 		//get locations from server (return promise)
 		console.log('Requesting locations from server')
-		return $.getJSON("/findPeople/locations/");
+		return $.getJSON("/findPeople/locations/")
+        .then((locData)=> {
+            this.locations = locData.locations
+            console.log('got locations:')
+            console.log(this)
+
+        })
 	}
 
-	this.drawCurrentLocations = () => {
+    this.drawLocationsOnMap = function(){
+        if (markers){
+            for (var i = 0; i < markers.length; i++) {
+              markers[i].setMap(null);
+            }
+        }
+
+        console.log('drawing locations on map')	
+        var newMarker = (position) => {
+            console.log('Drawing position:')
+            console.log(position)
+            var latlon = new this.gmapsApi.LatLng(position.lat, position.lon);
+            return new gmapsApi.Marker({position:latlon,map:map,title:"You are not here!"})
+        }; 
+        var locations = this.locations
+        var map = this.map
+        console.log(map)
+        console.log(locations);
+        console.log(this)
+        markers = $.map(locations, newMarker);
+        console.log(markers)
+        console.log(markers.length)
+        numMarkers = markers.length;
+        console.log('updated map bounds with ' + numMarkers.toString() + ' markers')
+    }
+    this.fitMapBounds = function(){
+        var locations = this.locations
+        if (locations){
+            var bounds = new gmapsApi.LatLngBounds();
+            for (var i = 0; i < markers.length; i++) {
+                //var iMarker = newMarker(locations[i]); 
+                bounds.extend(markers[i].getPosition());
+            }
+
+            map.fitBounds(bounds);
+        }
+	}
+    this.drawCurrentLocations = () => {
 		return this.getLocationsFromServer()
-		.then((locData) => {this.drawLocations(locData.locations)})
+		.then(() => {console.log('calling drawLocationsOnMap');this.drawLocationsOnMap()})
 	}
 
 	this.updateContinuously = () => {
@@ -244,53 +290,17 @@ var LocationDrawer = function(){
 	}
 }
 var markers
-var drawLocationsOnMap = function(locations, map, gmapsApi){
-	if (markers){
-		for (var i = 0; i < markers.length; i++) {
-		  markers[i].setMap(null);
-		}
-	}
 
-	console.log('drawing locations on map')	
-	var newMarker = function(position) {
-		console.log('Drawing position:')
-		console.log(position)
-		var latlon = new gmapsApi.LatLng(position.lat, position.lon);
-		return new gmapsApi.Marker({position:latlon,map:map,title:"You are not here!"})
-	}; 
-	console.log(map)
-	console.log(locations);
-	markers = $.map(locations, newMarker);
-	console.log(markers)
-	console.log(markers.length)
-	var bounds = new gmapsApi.LatLngBounds();
-	for (var i = 0; i < markers.length; i++) {
-		//var iMarker = newMarker(locations[i]); 
-		bounds.extend(markers[i].getPosition());
-	}
-
-	map.fitBounds(bounds);
-	numMarkers = markers.length;
-	console.log('updated map bounds with ' + numMarkers.toString() + ' markers')
-}
-
-var locationDrawer = new LocationDrawer()
 
 initialiseMap()
 .then((mapInfo)=>{
+    var locationDrawer = new LocationDrawer(mapInfo.map, mapInfo.gmapsApi)
 	console.log('map ready:')
 	console.log(mapInfo)
-	locationDrawer.setDrawingFunction(
-		function(locations) {
-			drawLocationsOnMap(
-				locations,
-				mapInfo.map,
-				mapInfo.gmapsApi
-			)
-		}
-	)
 	
 	locationDrawer.drawCurrentLocations()
+    .then(()=>{locationDrawer.fitMapBounds()})
+    
 	locationDrawer.updateContinuously()
 		
 })
