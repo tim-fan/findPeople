@@ -7,6 +7,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.forms.models import model_to_dict
 
 from django.utils import timezone
+from datetime import timedelta 
 from uuid import uuid4 as uuid
 from uuid import UUID
 
@@ -59,8 +60,21 @@ def locations(request):
             return JsonResponse(data)
     
     #Get goes here
-    # return known locations as json
+
+    #first, use this opportunity to clear out old positions from the database (should this happen in the background?)
+    clearOldLocations()    
+
+    # then return known locations as json
     users = User.objects.all()
     locationsDict = dict(locations = [model_to_dict(user.lastSeenLocation) for user in users])
     return JsonResponse(locationsDict)
 
+def clearOldLocations():
+    """
+    Remove locations from the database which are older than a certain number of hours
+    """
+    timeThresholdHours = 3 #locations older than this will be deleted
+    
+    time_threshold = timezone.now() - timedelta(hours=timeThresholdHours)
+    oldPositions = LocationObservation.objects.filter(time__lt=time_threshold)
+    oldPositions.delete()
